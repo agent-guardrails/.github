@@ -12,7 +12,9 @@ when present, adds to (and never replaces) these rules.
    ["Agent Guardrails Roadmap"](https://github.com/orgs/agent-guardrails/projects/1)
    and set its Status.
 3. Reference the issue from commits (`#123`) and the PR description (`Closes #123`).
-4. On merge the issue closes automatically — verify its Status on the board moved
+4. **All development goes through pull requests** — never push directly to the default
+   branch, not even for one-line fixes.
+5. On merge the issue closes automatically — verify its Status on the board moved
    to Done.
 
 ## Shared contracts live in agent-guardrails/docs
