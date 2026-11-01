@@ -1,0 +1,38 @@
+# Reusable AI PR review. Called from project repos:
+#   uses: agent-guardrails/.github/.github/workflows/ai-review.yml@main
+name: AI PR Review (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      models:
+        description: "Comma-separated OpenAI-compatible model ids, tried in order"
+        required: false
+        type: string
+        default: "gemini-3.5-flash,gemini-3.5-flash-lite"
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Check out org meta repo (review scripts)
+        uses: actions/checkout@v4
+        with:
+          repository: agent-guardrails/.github
+          ref: main
+          path: meta
+
+      - name: Run AI review
+        run: python3 meta/.github/scripts/review.py
+        env:
+          PR_NUM: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_API_URL: ${{ github.api_url }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_BASE_URL: ${{ vars.AI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai' }}
+          AI_MODELS: ${{ vars.AI_MODELS || inputs.models || 'gemini-3.5-flash,gemini-3.5-flash-lite' }}
