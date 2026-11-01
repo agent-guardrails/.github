@@ -38,7 +38,8 @@ project repo (e.g. shell-warden)            this repo (agent-guardrails/.github)
 ## Adding to a new project repo
 
 Either run `bash rollout.sh` (idempotent — it skips repos that already have the
-workflows and opens PRs for the rest), or copy the three files from
+workflows and opens PRs for the rest; it also adds the org-wide `AGENTS.md` to
+repos without their own), or copy the three files from
 [`caller-templates/`](caller-templates/) into the repo's `.github/workflows/` as-is.
 
 ## Setup (once)

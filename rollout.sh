@@ -26,11 +26,15 @@ for repo in $repos; do
   missing=()
   for wf in ai-review issue-triage release-notes; do
     if ! gh api "repos/$ORG/$repo/contents/.github/workflows/$wf.yml" >/dev/null 2>&1; then
-      missing+=("$wf")
+      missing+=(".github/workflows/$wf.yml")
     fi
   done
+  # Org-wide agent rules: only when the repo has no AGENTS.md of its own.
+  if ! gh api "repos/$ORG/$repo/contents/AGENTS.md" >/dev/null 2>&1; then
+    missing+=("AGENTS.md")
+  fi
   if [ "${#missing[@]}" -eq 0 ]; then
-    echo "   all workflows present, skipping"
+    echo "   all workflows + AGENTS.md present, skipping"
     continue
   fi
 
@@ -39,17 +43,23 @@ for repo in $repos; do
   gh api -X POST "repos/$ORG/$repo/git/refs" \
     -f "ref=refs/heads/$BRANCH" -f "sha=$sha" >/dev/null 2>&1 || true
 
-  for wf in "${missing[@]}"; do
-    content=$(base64 < "$SCRIPT_DIR/caller-templates/$wf.yml" | tr -d '\n')
-    gh api -X PUT "repos/$ORG/$repo/contents/.github/workflows/$wf.yml" \
-      -f "message=chore: add $wf workflow (agent-guardrails/ai-review)" \
+  for target in "${missing[@]}"; do
+    name="$(basename "$target")"
+    if [ "$name" = "AGENTS.md" ]; then
+      src="$SCRIPT_DIR/AGENTS.md"
+    else
+      src="$SCRIPT_DIR/caller-templates/$name"
+    fi
+    content=$(base64 < "$src" | tr -d '\n')
+    gh api -X PUT "repos/$ORG/$repo/contents/$target" \
+      -f "message=chore: add $name (agent-guardrails/.github)" \
       -f "content=$content" \
       -f "branch=$BRANCH" >/dev/null
   done
 
   gh pr create --repo "$ORG/$repo" --head "$BRANCH" --base "$default_branch" \
-    --title "Add AI workflows: code review, issue triage, release notes" \
-    --body "Thin callers for the reusable workflows in [$ORG/$CENTRAL_REPO](https://github.com/$ORG/$CENTRAL_REPO).
+    --title "Add AI workflows and org-wide AGENTS.md" \
+    --body "Thin callers for the reusable workflows in [$ORG/$CENTRAL_REPO](https://github.com/$ORG/$CENTRAL_REPO), plus the org-wide agent rules file.
 
 Requires the org secret \`AI_API_KEY\` (setup: see the central repo README)." \
     >/dev/null 2>&1 && echo "   PR created for: ${missing[*]}" \
