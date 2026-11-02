@@ -569,6 +569,19 @@ class TestVerifierPrompt(unittest.TestCase):
         self.assertIn('real file content', user)
         self.assertIn('~~~~', user)
 
+    def test_verifier_rubric_requires_end_effect_in_scope(self):
+        # Regression: ocsw#1 review — "an empty value is passed to the callee"
+        # is the mechanism, not the end effect; a callee living in another repo
+        # was never in the shown scope, yet the finding was rated CONFIRMED.
+        from review import VERIFIER_RUBRIC
+        self.assertIn('not the wrong result', VERIFIER_RUBRIC)
+        self.assertIn('outside the shown scope', VERIFIER_RUBRIC)
+
+    def test_resolution_rubric_rejects_out_of_scope_stand(self):
+        from review import RESOLUTION_RUBRIC
+        self.assertIn('outside the shown scope', RESOLUTION_RUBRIC)
+        self.assertIn('WITHDRAWN unless another visible defect remains', RESOLUTION_RUBRIC)
+
     def test_verdict_parsing_is_strict(self):
         from review import parse_verdict
         self.assertIsNone(parse_verdict('nope'))

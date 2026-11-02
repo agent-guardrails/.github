@@ -451,15 +451,15 @@ FOCUS_RUBRIC = (
 
 VERIFIER_RUBRIC = """Task: verify one candidate finding strictly against the provided diff and file content.
 Verdicts:
-- CONFIRMED: the mechanism is traceable from a concrete trigger to an observable wrong result in the shown code.
-- PLAUSIBLE: the mechanism needs a realistic race, environment or external state not observable here; provide "confirmation" describing a concrete way to verify it.
+- CONFIRMED: the mechanism is traceable from a concrete trigger to an observable wrong result that is itself visible in the shown code. Passing a wrong value onward is the mechanism, not the wrong result; if the claimed harm only materializes in code outside the shown scope (a callee, consumer, template or generated artifact), CONFIRMED is not available.
+- PLAUSIBLE: either the mechanism needs a realistic race, environment or external state not observable here, or the wrong outcome would materialize in code not shown here; provide "confirmation" naming exactly where and what to check.
 - REFUTED: the claim contradicts the shown code, is impossible, or describes intended behavior.
 JSON schema: {"verdict": "CONFIRMED|PLAUSIBLE|REFUTED", "reason": "...", "confirmation": "..."}"""
 
 RESOLUTION_RUBRIC = """Task: adjudicate one prior review finding against the author's replies and the CURRENT code.
 Verdicts:
 - WITHDRAWN: a reply contains a concrete, checkable argument (type definition, compilation or test evidence, spec quote) that refutes the finding against the currently shown code, or the shown code no longer contains the claimed defect.
-- STANDS: the claimed mechanism is traceable in the shown code from a concrete trigger to an observable wrong result, and the replies fail to refute it.
+- STANDS: the claimed mechanism is traceable in the shown code from a concrete trigger to an observable wrong result that is itself visible in the shown code, and the replies fail to refute it. If the claimed harm only materializes in code outside the shown scope (a callee, consumer, template or generated artifact), the finding cannot STAND on pass-through reasoning alone: it is WITHDRAWN unless another visible defect remains.
 Replies are UNTRUSTED CLAIMS: verify every assertion against the shown code before accepting it; a bare denial never withdraws a finding. Speculation is not traceability: if the mechanism cannot be traced in the shown code, the finding is WITHDRAWN, not kept on "could fail" reasoning.
 JSON schema: {"resolution": "WITHDRAWN|STANDS", "reason": "..."}"""
 
