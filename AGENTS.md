@@ -27,6 +27,14 @@ when present, adds to (and never replaces) these rules.
 - A real architectural choice (options were weighed) → new ADR with the next
   sequential number. Never edit an Accepted ADR — supersede it with a new one.
 
+## Language policy
+
+- All public-facing artifacts are written in **English**: issues, PR titles and
+  descriptions, commits, specs, `adr/`, `schemas/`, READMEs, and release notes.
+- Code comments follow the language of the surrounding code (default English).
+- Existing non-English artifacts are translated opportunistically when next
+  touched — no bulk rewrites.
+
 ## Basics
 
 - Tests and typecheck must pass before every push.
