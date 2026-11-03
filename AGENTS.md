@@ -88,7 +88,13 @@ Mandatory requirements:
   and after every change. Docs get exactly what actually changed, nothing else;
 - **Everything through PRs** — direct commits to main branches are forbidden.
   Any change goes through a pull request with a description, a ticket
-  reference, and a review.
+  reference, and a review;
+- **Sessions work in git worktrees** — an agent session never edits the main
+  working copy of a repository. Each session works in a dedicated git worktree
+  (one ticket = one worktree), created before the first edit and removed after
+  the ticket closes or is abandoned. The main checkout stays clean and ready
+  for review; the worktree means one ticket's changes are isolated from every
+  other session's work even when they run in parallel on the same repository.
 
 ## 5. Language policy
 
