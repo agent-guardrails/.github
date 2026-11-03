@@ -1,0 +1,4 @@
+{
+  "name": "Release notes (thin caller)",
+  "description": "Adds a ~10-line caller workflow that invokes the org-wide reusable release notes workflow on published releases."
+}

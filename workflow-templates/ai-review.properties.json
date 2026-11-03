@@ -1,0 +1,4 @@
+{
+  "name": "AI review (thin caller)",
+  "description": "Adds a ~10-line caller workflow that runs the org-wide reusable AI code review on every pull request."
+}
