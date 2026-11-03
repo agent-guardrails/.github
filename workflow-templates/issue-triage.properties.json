@@ -1,0 +1,4 @@
+{
+  "name": "Issue triage (thin caller)",
+  "description": "Adds a ~10-line caller workflow that invokes the org-wide reusable issue triage workflow on new issues."
+}

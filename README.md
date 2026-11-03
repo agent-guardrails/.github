@@ -37,10 +37,13 @@ project repo (e.g. shell-warden)            this repo (agent-guardrails/.github)
 
 ## Adding to a new project repo
 
-Either run `bash rollout.sh` (idempotent — it skips repos that already have the
-workflows and opens PRs for the rest; it also adds the org-wide `AGENTS.md` to
-repos without their own), or copy the three files from
-[`caller-templates/`](caller-templates/) into the repo's `.github/workflows/` as-is.
+- Run `bash rollout.sh` (idempotent — it skips repos that already have the
+  workflows and opens PRs for the rest; it also adds the org-wide `AGENTS.md` to
+  repos without their own).
+- Alternatively, pick the workflows in the Actions tab under "New workflow"
+  (GitHub serves the [org workflow templates](https://github.com/agent-guardrails/.github/tree/main/workflow-templates)),
+  or copy the three files from
+  [`workflow-templates/`](workflow-templates/) into the repo's `.github/workflows/` as-is.
 
 ## Setup (once)
 
@@ -79,6 +82,6 @@ org variables. Models are tried in order on 429/5xx, so list a fallback.
 .github/
 ├── workflows/       reusable workflows (workflow_call) — the only place logic lives
 └── scripts/         review.py (PR review), triage.py (issues), release_notes.py (releases)
-caller-templates/    thin caller workflows that rollout.sh copies into project repos
+workflow-templates/ thin caller workflows (+ GitHub workflow template metadata)
 rollout.sh           adds the caller workflows to every org repo via PRs (idempotent)
 ```

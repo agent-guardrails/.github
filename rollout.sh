@@ -48,7 +48,7 @@ for repo in $repos; do
     if [ "$name" = "AGENTS.md" ]; then
       src="$SCRIPT_DIR/AGENTS.md"
     else
-      src="$SCRIPT_DIR/caller-templates/$name"
+      src="$SCRIPT_DIR/workflow-templates/$name"
     fi
     content=$(base64 < "$src" | tr -d '\n')
     gh api -X PUT "repos/$ORG/$repo/contents/$target" \
