@@ -1,0 +1,23 @@
+{
+  "number": 25,
+  "html_url": "https://github.com/agent-guardrails/.github/pull/25",
+  "title": "Auditable review workflow",
+  "body": "Fixture pull request",
+  "state": "open",
+  "changed_files": 2,
+  "user": { "login": "reviewer" },
+  "labels": [{ "name": "feature" }],
+  "base": {
+    "ref": "main",
+    "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "repo": { "full_name": "agent-guardrails/.github" }
+  },
+  "head": {
+    "ref": "feature",
+    "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "repo": {
+      "full_name": "contributor/fork",
+      "clone_url": "https://github.com/contributor/fork.git"
+    }
+  }
+}
