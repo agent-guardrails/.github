@@ -7,9 +7,9 @@ import { mkdir, readFile, symlink } from 'node:fs/promises';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 
-function launch(file) {
+function launch(file, args = []) {
   return new Promise((resolve) => {
-    execFile(process.execPath, [file], { cwd: path.dirname(new URL(import.meta.url).pathname) }, (error, stdout, stderr) => resolve({ error, stdout, stderr }));
+    execFile(process.execPath, [file, ...args], { cwd: path.dirname(new URL(import.meta.url).pathname) }, (error, stdout, stderr) => resolve({ error, stdout, stderr }));
   });
 }
 
@@ -21,30 +21,62 @@ test('fixed CLI parser rejects missing, duplicate, and unknown flags', () => {
   assert.throws(() => parseArgs(['--other'], definition), { code: 'invalid-input' });
 });
 
-test('OpenCode V2 permissions deny by default and allow only fixed non-publisher commands', async () => {
+test('OpenCode V2 permissions allow fixed read-only review commands and override confirmed publication', async () => {
   const config = JSON.parse(await readFile(new URL('../../opencode.jsonc', import.meta.url), 'utf8'));
-  assert.ok(Array.isArray(config.permissions));
-  const shellRules = config.permissions.filter((rule) => rule.action === 'shell');
-  assert.deepEqual(shellRules[0], { action: 'shell', resource: '*', effect: 'ask' });
-  assert.deepEqual(shellRules.filter((rule) => rule.effect === 'allow').map((rule) => rule.resource), [
+  assert.equal(Object.hasOwn(config, 'permissions'), false);
+  assert.equal(typeof config.permission, 'object');
+  assert.equal(typeof config.permission.bash, 'object');
+  const shellRules = Object.entries(config.permission.bash);
+  assert.deepEqual(shellRules[0], ['*', 'ask']);
+  assert.deepEqual(shellRules.filter(([, effect]) => effect === 'allow').map(([pattern]) => pattern), [
     'node .github/scripts/pr-review-sync.mjs *',
     'node .github/scripts/pr-review-collect.mjs *',
-    'node --check .github/scripts/pr-review-sync.mjs',
-    'node --check .github/scripts/pr-review-collect.mjs',
   ]);
-  assert.equal(shellRules.some((rule) => rule.effect === 'allow' && rule.resource.includes('pr-review-publish.mjs')), false);
-  assert.equal(shellRules.some((rule) => rule.effect === 'allow' && ['*', 'git *', 'gh *'].includes(rule.resource)), false);
-  const effectiveEffect = (command) => shellRules.reduce((effect, rule) => {
-    const expression = new RegExp(`^${rule.resource.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replaceAll('\\*', '.*')}$`);
-    return expression.test(command) ? rule.effect : effect;
+  assert.equal(shellRules.some(([pattern, effect]) => effect === 'allow' && ['*', 'git *', 'gh *'].includes(pattern)), false);
+  const effectiveEffect = (command) => shellRules.reduce((effect, [pattern, action]) => {
+    const expression = new RegExp(`^${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replaceAll('\\*', '.*')}$`);
+    return expression.test(command) ? action : effect;
   }, undefined);
   assert.equal(effectiveEffect('node .github/scripts/pr-review-sync.mjs --repo agent-guardrails/example'), 'allow');
-  assert.equal(effectiveEffect('node .github/scripts/pr-review-publish.mjs'), 'ask');
-  assert.equal(effectiveEffect('node .github/scripts/pr-review-publish.mjs --confirm'), 'ask');
+  assert.equal(effectiveEffect('node .github/scripts/pr-review-collect.mjs --repo agent-guardrails/example'), 'allow');
+  assert.equal(effectiveEffect('node .github/scripts/pr-review-publish.mjs --bundle /tmp/bundle --findings /tmp/findings.json'), 'ask');
+  assert.equal(effectiveEffect('node .github/scripts/pr-review-publish.mjs --bundle /tmp/bundle --findings /tmp/findings.json --confirm'), 'ask');
+  assert.equal(effectiveEffect('node .github/scripts/pr-review-publish.mjs --confirm --bundle /tmp/bundle --findings /tmp/findings.json'), 'ask');
+  assert.equal(effectiveEffect('node .github/scripts/pr-review-publish.mjs --con""firm --bundle /tmp/bundle --findings /tmp/findings.json'), 'ask');
   assert.equal(effectiveEffect('node .github/scripts/pr-review-publish.mjs --unexpected value'), 'ask');
   assert.equal(effectiveEffect('node --test .github/scripts/test_pr_review_cli.mjs'), 'ask');
   assert.equal(effectiveEffect('node --test .github/scripts/test_pr_review_cli.mjs .github/scripts/pr-review/bundle-constants.mjs'), 'ask');
+  assert.equal(effectiveEffect('git status'), 'ask');
   assert.equal(effectiveEffect('gh auth status'), 'ask');
+  assert.equal(effectiveEffect('npm test'), 'ask');
+  assert.equal(effectiveEffect('make build'), 'ask');
+});
+
+test('review policy requires bundle-based review and forbids local reviewed-code execution', async () => {
+  const agents = await readFile(new URL('../../AGENTS.md', import.meta.url), 'utf8');
+  const readme = await readFile(new URL('../../README.md', import.meta.url), 'utf8');
+  const workflow = await readFile(new URL('../workflows/pr-review-tests.yml', import.meta.url), 'utf8');
+  for (const policy of [agents, readme]) {
+    assert.match(policy, /shortest fixed (?:path|sequence)/i);
+    assert.match(policy, /pr-review-sync/i);
+    assert.match(policy, /pr-review-collect/i);
+    assert.match(policy, /verified evidence bundle|verified bundle/i);
+    assert.match(policy, /(?:title and description|pull-request title and description)/i);
+    assert.match(policy, /intent, constraints, verification/i);
+    assert.match(policy, /missing or stale description|missing, vague, or stale PR description/i);
+    assert.match(policy, /must not\s+invoke generic `review-work`|MUST NOT invoke generic `review-work`/i);
+    assert.match(policy, /local tests,?\s+builds,?\s+package scripts/i);
+    assert.match(policy, /CI results are (?:remote )?evidence/i);
+    assert.match(policy, /immediate explicit approval|explicit approval immediately/i);
+  }
+  assert.match(agents, /fixture tests may run only in this repository's CI/i);
+  assert.match(readme, /fixture tests run only in this\s+repository's CI/i);
+  assert.match(readme, /Quit and restart\s+OpenCode/i);
+  assert.match(workflow, /run: node --test \.github\/scripts\/test_pr_review_\*\.mjs/);
+  assert.match(workflow, /repository: agent-guardrails\/docs/);
+  assert.match(workflow, /PR_REVIEW_REQUIRE_SCHEMAS: ["']1["']/);
+  assert.match(workflow, /PR_REVIEW_SCHEMA_DIR: \.review-docs\/schemas/);
+  assert.doesNotMatch(workflow, /\b(?:npm|pnpm|yarn|bun)\s+(?:ci|install)\b/);
 });
 
 test('caller path rejects NUL and final-component symlink abuse', async () => {
