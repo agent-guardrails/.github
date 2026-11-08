@@ -9,6 +9,7 @@ const marker = (id) => `<!-- agent-guardrails-pr-review:${id} -->`;
 function renderFinding(finding) {
   return [
     `### [${finding.severity}] ${finding.title}`,
+    ...(finding.filePath && finding.line === undefined ? [`**File:** \`${finding.filePath}\``] : []),
     finding.explanation,
     `**Remediation:** ${finding.remediation}`,
     finding.blocking ? '**Blocking:** yes' : '**Blocking:** no',
@@ -19,14 +20,14 @@ function renderFinding(finding) {
 export function buildPublication(document, existingReviews, existingComments) {
   const existingText = [...existingReviews, ...existingComments].map((item) => item.body ?? '').join('\n');
   const unmarked = document.findings.filter((finding) => !existingText.includes(marker(finding.findingId)));
-  const reviewLevel = unmarked.filter((finding) => !finding.filePath);
-  const inline = unmarked.filter((finding) => finding.filePath);
+  const bodyFindings = unmarked.filter((finding) => finding.line === undefined);
+  const inline = unmarked.filter((finding) => finding.line !== undefined);
   const bodyParts = [
     '# Agent Guardrails offline PR review',
     `Overall verdict: **${document.overallVerdict}**`,
-    ...reviewLevel.map(renderFinding),
+    ...bodyFindings.map(renderFinding),
   ];
-  if (reviewLevel.length === 0) bodyParts.push(inline.length ? 'Inline findings are attached to this COMMENT review.' : 'No unmarked findings remain.');
+  if (bodyFindings.length === 0) bodyParts.push(inline.length ? 'Inline findings are attached to this COMMENT review.' : 'No unmarked findings remain.');
   return {
     body: bodyParts.join('\n\n'),
     comments: inline.map((finding) => ({

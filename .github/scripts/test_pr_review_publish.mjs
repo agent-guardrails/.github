@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { publishReview } from './pr-review/publish.mjs';
+import { deriveFindingId } from './pr-review/findings.mjs';
 import { fixture, HEAD, makeBundle, makeFindings, temporary } from './pr-review/test-helpers.mjs';
 
 const response = (value) => ({ code: 0, stdout: Buffer.from(JSON.stringify(value)), stderr: Buffer.alloc(0) });
@@ -38,6 +39,23 @@ test('preview emits exact COMMENT payload and never writes', async () => {
   assert.equal(result.review.comments.length, 1);
   assert.equal(result.review.comments[0].body.includes(`<!-- agent-guardrails-pr-review:${findingId} -->`), true);
   assert.equal(fake.calls.some((call) => call.args.includes('--method')), false);
+});
+
+test('file-level findings render in the review body without inline coordinates', async () => {
+  const root = await temporary();
+  const bundle = await makeBundle(root);
+  const findings = await makeFindings(root, bundle, (document) => {
+    delete document.findings[0].line;
+    delete document.findings[0].diffSide;
+    document.findings[0].findingId = deriveFindingId(document, document.findings[0]);
+    return document;
+  });
+  const fake = await publisherRunner();
+
+  const result = await publishReview({ bundle: bundle.root, findings, confirm: false }, fake);
+
+  assert.equal(result.review.comments.length, 0);
+  assert.match(result.review.body, /\*\*File:\*\* `src\/review\.mjs`/);
 });
 
 test('omitted confirm remains preview-only and cannot reach a mutation endpoint', async () => {
