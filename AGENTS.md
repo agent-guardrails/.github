@@ -83,11 +83,11 @@ with it.
 
 ## 7. Local PR review
 
-- A request to review a GitHub PR MUST take the shortest fixed path. Run the
-  trusted review scripts from the active OpenCode workspace root, never from the
-  reviewed worktree. Do not change the shell `workdir` merely to shorten the
-  script path: permission matching uses the literal command text and does not
-  rebase allowlist patterns against `workdir`.
+- A request to review a GitHub PR MUST take the shortest fixed path. Use scripts
+  from a trusted tooling checkout, never from the reviewed worktree. Invoke those
+  scripts from the active OpenCode workspace root; do not change the shell
+  `workdir` merely to shorten the script path. Permission matching uses the
+  literal command text and does not rebase allowlist patterns against `workdir`.
 - Choose the exact command prefix for the active workspace layout:
   - Parent workspace containing the trusted tooling checkout at `.github/`:
     `node .github/.github/scripts/pr-review-sync.mjs --repo OWNER/REPO --pr NUMBER
