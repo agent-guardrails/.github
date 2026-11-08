@@ -1,10 +1,26 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeChangedFiles, paginate, paginateNamed } from './pr-review/github.mjs';
+import { ghJson, ghRaw, normalizeChangedFiles, paginate, paginateNamed } from './pr-review/github.mjs';
 import { MAX_ARTIFACT_BYTES } from './pr-review/bundle.mjs';
 import { REPO } from './pr-review/test-helpers.mjs';
 
 const response = (value) => ({ code: 0, stdout: Buffer.from(JSON.stringify(value)), stderr: Buffer.alloc(0) });
+
+test('GitHub escape-sequence opt-in is scoped to explicitly requested raw responses', async () => {
+  const calls = [];
+  const run = async (executable, args) => {
+    calls.push({ executable, args });
+    return response({ ok: true });
+  };
+  await ghJson(run, REPO, '/pulls/25');
+  await ghRaw(run, REPO, '/actions/jobs/1/logs');
+  await ghRaw(run, REPO, '/actions/jobs/2/logs', { allowEscapeSequences: true });
+  assert.deepEqual(calls.map((call) => call.args), [
+    ['api', '/repos/agent-guardrails/.github/pulls/25'],
+    ['api', '/repos/agent-guardrails/.github/actions/jobs/1/logs'],
+    ['api', '--allow-escape-sequences', '/repos/agent-guardrails/.github/actions/jobs/2/logs'],
+  ]);
+});
 
 test('pagination flattens complete list and named-object pages deterministically', async () => {
   const list = await paginate(async () => response([{ id: 1 }, { id: 2 }]), REPO, '/pulls/1/files', '/tmp');

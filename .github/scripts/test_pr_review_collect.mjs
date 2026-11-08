@@ -15,6 +15,7 @@ function remoteEvidenceRunner(logs) {
   return async (executable, args) => {
     assert.equal(executable, 'gh');
     const endpoint = args.find((arg) => arg.startsWith('/repos/'));
+    assert.equal(args.includes('--allow-escape-sequences'), endpoint.includes('/actions/jobs/') && endpoint.endsWith('/logs'));
     if (endpoint.includes('/pulls/25/files') || endpoint.includes('/pulls/25/reviews') || endpoint.includes('/pulls/25/comments') || endpoint.includes('/issues/25/comments')) return response([]);
     if (endpoint.includes('/check-runs')) return response({ total_count: 0, check_runs: [] });
     if (endpoint.includes('/check-suites')) return response({ total_count: 0, check_suites: [] });
@@ -42,6 +43,7 @@ async function collectorRunner(worktree, options = {}) {
       return response('');
     }
     const endpoint = args.find((arg) => arg.startsWith('/repos/'));
+    assert.equal(args.includes('--allow-escape-sequences'), endpoint.includes('/actions/jobs/') && endpoint.endsWith('/logs'));
     if (endpoint.endsWith('/pulls/25')) {
       prReads += 1;
       const value = structuredClone(pr);
@@ -120,6 +122,23 @@ test('collect stores a sanitized log at the exact artifact limit', async () => {
   };
   await collectReview({ repo: 'agent-guardrails/.github', pr: '25', worktree, out }, { run: fake.run, now: () => new Date() });
   assert.equal((await stat(path.join(out, 'ci-logs', '11-101.txt'))).size, MAX_ARTIFACT_BYTES);
+});
+
+test('collect strips terminal sequences and unsafe controls while preserving readable whitespace', async () => {
+  const raw = Buffer.from('first\r\n\t\u001b[31mred\u001b[0m \u001b]8;;https://example.test\u0007link\u001b]8;;\u0007\u0001\u000b\u000c\u000e\u007f\u0085 last\n');
+  const evidence = await collectRemoteEvidence(remoteEvidenceRunner({ 1: raw }), REPO, 25, HEAD, 0, '/tmp');
+  assert.equal(evidence.logs['11-1.txt'], 'first\r\n\tred link last\n');
+  assert.equal(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/.test(evidence.logs['11-1.txt']), false);
+});
+
+test('collect rejects NUL-bearing and invalid UTF-8 log payloads', async () => {
+  for (const raw of [Buffer.from([0x61, 0x00, 0x62]), Buffer.from([0xc3, 0x28])]) {
+    const evidence = await collectRemoteEvidence(remoteEvidenceRunner({ 1: raw }), REPO, 25, HEAD, 0, '/tmp');
+    assert.deepEqual(evidence.logs, {});
+    assert.ok(evidence.selectedCi.some((item) => item.jobId === '1' && item.evidenceState === 'unavailable'));
+    assert.ok(evidence.ciRuns[0].jobs.some((job) => String(job.id) === '1' && job.logEvidenceState === 'unavailable'));
+    assert.ok(evidence.incomplete.some((item) => item.kind === 'ci-log' && item.identity === '1' && item.reason === 'Log response was not valid text'));
+  }
 });
 
 test('collect rejects sanitized logs one byte over the artifact limit before storage', async () => {

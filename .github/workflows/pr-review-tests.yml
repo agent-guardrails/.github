@@ -1,0 +1,41 @@
+name: PR review tool tests
+
+on:
+  pull_request:
+    paths:
+      - AGENTS.md
+      - README.md
+      - opencode.jsonc
+      - .github/scripts/pr-review/**
+      - .github/scripts/pr-review-*.mjs
+      - .github/scripts/test_pr_review_*.mjs
+      - .github/workflows/pr-review-tests.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out trusted review tooling
+        uses: actions/checkout@v4
+
+      - name: Check out canonical review schemas
+        uses: actions/checkout@v4
+        with:
+          repository: agent-guardrails/docs
+          path: .review-docs
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Run trusted review-tool tests
+        env:
+          PR_REVIEW_REQUIRE_SCHEMAS: "1"
+          PR_REVIEW_SCHEMA_DIR: .review-docs/schemas
+        run: node --test .github/scripts/test_pr_review_*.mjs

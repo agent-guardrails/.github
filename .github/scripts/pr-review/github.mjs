@@ -20,7 +20,10 @@ export async function ghJson(run, repo, suffix, options = {}) {
 }
 
 export async function ghRaw(run, repo, suffix, options = {}) {
-  const result = await run('gh', ['api', endpoint(repo, suffix)], { cwd: options.cwd, allowFailure: true });
+  const args = ['api'];
+  if (options.allowEscapeSequences) args.push('--allow-escape-sequences');
+  args.push(endpoint(repo, suffix));
+  const result = await run('gh', args, { cwd: options.cwd, allowFailure: true });
   if (result.code === 0) return result;
   const message = result.stderr.toString('utf8') || 'gh failed';
   const rateLimited = /\b(?:secondary )?rate limit\b|\babuse rate limit\b/i.test(message);
