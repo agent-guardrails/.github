@@ -201,6 +201,19 @@ test('fixture findings validate against bundle identity and evidence', async () 
   assert.match(result.document.findings[0].findingId, /^f-[0-9a-f]{64}$/);
 });
 
+test('file-level findings validate for changed files without inline coordinates', async () => {
+  const root = await temporary();
+  const bundle = await makeBundle(root);
+  const file = await makeFindings(root, bundle, (document) => {
+    delete document.findings[0].line;
+    delete document.findings[0].diffSide;
+    document.findings[0].findingId = deriveFindingId(document, document.findings[0]);
+    return document;
+  });
+
+  await assert.doesNotReject(validateFindings(file, bundle));
+});
+
 test('findings use bytes verified before bundle files are replaced', async () => {
   const root = await temporary();
   const bundle = await makeBundle(root, { payloads: {
@@ -253,6 +266,7 @@ for (const [name, mutate] of [
   ['duplicate ID', (doc) => { doc.findings.push({ ...doc.findings[0] }); }],
   ['bad ID', (doc) => { doc.findings[0].findingId = 'Bad_ID'; }],
   ['partial location', (doc) => { delete doc.findings[0].line; }],
+  ['orphaned line', (doc) => { delete doc.findings[0].filePath; delete doc.findings[0].diffSide; }],
   ['line outside diff', (doc) => { doc.findings[0].line = 999; }],
   ['unknown changed file', (doc) => { doc.findings[0].filePath = 'src/other.mjs'; }],
   ['bad evidence hash', (doc) => { doc.findings[0].evidenceReferences[0].sha256 = '0'.repeat(64); }],

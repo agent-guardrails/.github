@@ -40,6 +40,9 @@ function validate(schema, value, root, location = '$') {
   }
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     if (schema.required) schema.required.forEach((key) => assert.ok(Object.hasOwn(value, key), `${location}.${key} required`));
+    for (const [key, dependencies] of Object.entries(schema.dependentRequired ?? {})) {
+      if (Object.hasOwn(value, key)) dependencies.forEach((dependency) => assert.ok(Object.hasOwn(value, dependency), `${location}.${dependency} required`));
+    }
     if (schema.minProperties !== undefined) assert.ok(Object.keys(value).length >= schema.minProperties, `${location} minProperties`);
     for (const [key, item] of Object.entries(value)) {
       if (schema.propertyNames) validate(schema.propertyNames, key, root, `${location} key`);
@@ -101,7 +104,12 @@ test('generated bundle and findings validate against canonical schemas', async (
   delete missingInlineField.findings[0].diffSide;
   assert.throws(() => validate(schemas.findings, missingInlineField, schemas.findings), /required/);
 
+  const fileLevelFinding = structuredClone(documents.findings);
+  delete fileLevelFinding.findings[0].line;
+  delete fileLevelFinding.findings[0].diffSide;
+  assert.doesNotThrow(() => validate(schemas.findings, fileLevelFinding, schemas.findings));
+
   const orphanedInlineField = structuredClone(documents.findings);
   delete orphanedInlineField.findings[0].filePath;
-  assert.throws(() => validate(schemas.findings, orphanedInlineField, schemas.findings), /not/);
+  assert.throws(() => validate(schemas.findings, orphanedInlineField, schemas.findings), /required/);
 });
