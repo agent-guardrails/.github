@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from 'node:util';
 import { ghRaw, normalizeChangedFiles, paginate, paginateNamed } from './github.mjs';
 import { MAX_ARTIFACT_BYTES, MAX_BUNDLE_BYTES } from './bundle.mjs';
 import { fail, redact } from './errors.mjs';
@@ -6,7 +7,9 @@ function textLog(buffer) {
   if (buffer.includes(0)) return undefined;
   const text = buffer.toString('utf8');
   if (Buffer.from(text).compare(buffer) !== 0 || text.includes('\uFFFD')) return undefined;
-  return redact(text);
+  const withoutTerminalControls = stripVTControlCharacters(text);
+  const withoutUnsafeControls = withoutTerminalControls.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, '');
+  return redact(withoutUnsafeControls);
 }
 
 function stateFor(status, conclusion) {
@@ -62,7 +65,11 @@ export async function collectRemoteEvidence(run, repo, pr, headSha, changedFileC
       let logEvidenceState = job.status === 'completed' ? 'missing' : 'pending';
       const selected = { ...runSelection(runItem, evidenceState), jobId: String(job.id), url: job.html_url };
       if (job.status === 'completed') {
-        const response = await ghRaw(run, repo, `/actions/jobs/${job.id}/logs`, { cwd, recoverFailureCodes: ['not-found', 'permission-denied'] });
+        const response = await ghRaw(run, repo, `/actions/jobs/${job.id}/logs`, {
+          cwd,
+          allowEscapeSequences: true,
+          recoverFailureCodes: ['not-found', 'permission-denied'],
+        });
         const logText = response.code === 0 ? textLog(response.stdout) : undefined;
         if (logText !== undefined) {
           const name = `${runItem.id}-${job.id}.txt`;
@@ -75,9 +82,11 @@ export async function collectRemoteEvidence(run, repo, pr, headSha, changedFileC
           selected.logUrl = `https://api.github.com/repos/${repo.full}/actions/jobs/${job.id}/logs`;
           logEvidenceState = 'available';
         } else {
-          logEvidenceState = response.failureCode === 'permission-denied' ? 'inaccessible' : 'missing';
+          logEvidenceState = response.code === 0
+            ? 'unavailable'
+            : response.failureCode === 'permission-denied' ? 'inaccessible' : 'missing';
           if (selected.evidenceState === 'available') selected.evidenceState = logEvidenceState;
-          const reason = response.code === 0 ? 'Log response was not text' : logEvidenceState === 'inaccessible' ? 'Log access is denied' : 'Log unavailable';
+          const reason = response.code === 0 ? 'Log response was not valid text' : logEvidenceState === 'inaccessible' ? 'Log access is denied' : 'Log unavailable';
           incomplete.push(unavailable('ci-log', job.id, reason));
         }
       } else incomplete.push(unavailable('ci-log', job.id, 'Job is not completed'));

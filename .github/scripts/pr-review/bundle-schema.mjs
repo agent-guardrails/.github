@@ -128,7 +128,7 @@ export function validatePayloadRelationships(snapshot, manifest, logFiles, repoF
       const item = selected.get(key);
       const logName = `ci-logs/${run.id}-${job.id}.txt`;
       const hasLog = logFiles.includes(logName);
-      const validLogState = job.status === 'completed' ? ['available', 'missing', 'inaccessible'].includes(job.logEvidenceState) : job.logEvidenceState === 'pending';
+      const validLogState = job.status === 'completed' ? ['available', 'unavailable', 'missing', 'inaccessible'].includes(job.logEvidenceState) : job.logEvidenceState === 'pending';
       if (!validLogState) fail('bundle-invalid', 'CI job log state is invalid');
       if ((job.logEvidenceState === 'available') !== hasLog) fail('bundle-invalid', 'CI log state differs from bundle inventory');
       if (hasLog) expectedLogs.add(logName);
