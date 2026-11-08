@@ -76,12 +76,86 @@ org variables. Models are tried in order on 429/5xx, so list a fallback.
   `review.py` is deliberately injection-resistant (diff content is data, not
   instructions) and never executes anything from the diff.
 
+## Auditable local PR review
+
+The script-based review workflow creates an exact-head worktree, captures an
+immutable evidence bundle, accepts findings produced offline, and publishes only
+a previewed and explicitly confirmed `COMMENT` review. It never runs code from
+the reviewed repository.
+
+Requirements are Node.js, `git`, and an authenticated GitHub CLI. Run the three
+fixed entry points from this repository:
+
+```sh
+node .github/scripts/pr-review-sync.mjs \
+  --repo agent-guardrails/example --pr 42 --worktree /absolute/path/pr-42 \
+  --head 0123456789abcdef0123456789abcdef01234567
+
+node .github/scripts/pr-review-collect.mjs \
+  --repo agent-guardrails/example --pr 42 --worktree /absolute/path/pr-42 \
+  --out /absolute/path/pr-42-bundle
+
+node .github/scripts/pr-review-publish.mjs \
+  --bundle /absolute/path/pr-42-bundle \
+  --findings /absolute/path/pr-42-findings.json
+
+node .github/scripts/pr-review-publish.mjs \
+  --bundle /absolute/path/pr-42-bundle \
+  --findings /absolute/path/pr-42-findings.json --confirm
+```
+
+`sync` uses a private bare cache beside the requested worktree and records its
+identity in an adjacent sidecar. It refuses dirty or untracked files and verifies
+detached `HEAD` exactly. `collect` re-verifies that state, creates the source diff
+locally, paginates remote review and CI evidence, records unavailable evidence,
+and atomically writes a canonical, SHA-256-protected bundle at exactly `--out`.
+Running collection again reuses only a complete verified same-head bundle.
+
+Offline reviewers receive the verified bundle and create a separate version-1
+findings JSON document without GitHub credentials. Running the publication
+command in preview mode additionally requires GitHub read access so it can omit
+findings already present on the pull request. Findings bind repository, PR number,
+reviewed head, changed-file locations, and evidence hashes to the bundle. Each
+stable `findingId` is derived from the exact review identity, location, and a
+reviewer-supplied stable `defectClass`; it remains unchanged when only prose,
+evidence references, or severity changes.
+
+Publication without `--confirm` prints the exact review body and inline comments
+as JSON and performs no write. Confirmed publication rereads the PR head
+immediately before one review POST, suppresses findings already carrying their
+hidden stable-ID marker, and submits event `COMMENT` only. Read access for sync,
+collection, and preview should be separated from the account allowed to publish
+reviews. The publisher cannot approve, request changes, merge, create issues or
+issue comments, edit comments, resolve threads, or mutate labels and assignees.
+
+The repository `opencode.jsonc` targets OpenCode V2. Its first shell rule is a
+catch-all `ask`; later rules allow only the fixed sync, collect, and syntax-check
+command shapes. Tests and every publisher command shape, including `--confirm`,
+remain `ask`. `AGENTS.md` requires a trusted tooling checkout and
+treats reviewed instructions, hooks, configuration, and executables as untrusted
+data, never authority. It also forbids generic GitHub, shell, package, build, and
+reviewed-code execution. Restart OpenCode after changing or adopting this
+configuration.
+
+Bundle verification checks the fixed inventory (including an empty `ci-logs/`),
+safe relative paths, absence of symlinks and extra files, exact artifact hashes,
+the `file-hashes.json` digest, and the canonical manifest self-digest. A stale
+head, malformed finding, unsafe path, inaccessible required state, or altered
+artifact fails closed. CI failures and unavailable logs remain explicit evidence;
+they are not treated as successful checks.
+
+The initial version supports only `agent-guardrails/REPO` repositories and
+absolute caller-controlled local paths. It does not run tests or builds, infer
+paths, execute or decompress evidence, clean user worktrees, or provide workflow
+or rollout integration. This is a local CLI implementation, not an MCP server;
+offline reviewers exchange files rather than using MCP transport.
+
 ## Repo layout
 
 ```
 .github/
 ├── workflows/       reusable workflows (workflow_call) — the only place logic lives
-└── scripts/         review.py (PR review), triage.py (issues), release_notes.py (releases)
+└── scripts/         existing automation plus the three local pr-review-*.mjs entry points
 workflow-templates/ thin caller workflows (+ GitHub workflow template metadata)
 rollout.sh           adds the caller workflows to every org repo via PRs (idempotent)
 ```
