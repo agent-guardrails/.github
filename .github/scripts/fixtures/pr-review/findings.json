@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "repository": "agent-guardrails/.github",
+  "prNumber": 25,
+  "reviewedHeadSha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "overallVerdict": "request-changes",
+  "findings": [{
+    "findingId": "f-0000000000000000000000000000000000000000000000000000000000000000",
+    "defectClass": "unsafe-path-join",
+    "severity": "major",
+    "title": "Path escapes the intended root",
+    "explanation": "The path is joined without a containment check.",
+    "filePath": "src/review.mjs",
+    "line": 12,
+    "diffSide": "RIGHT",
+    "evidenceReferences": [],
+    "remediation": "Resolve the path and verify containment.",
+    "blocking": true
+  }]
+}
