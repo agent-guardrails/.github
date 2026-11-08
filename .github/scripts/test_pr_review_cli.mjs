@@ -60,7 +60,7 @@ test('review policy requires bundle-based review and forbids local reviewed-code
     assert.match(policy, /shortest fixed (?:path|sequence)/i);
     assert.match(policy, /pr-review-sync/i);
     assert.match(policy, /pr-review-collect/i);
-    assert.match(policy, /verified evidence bundle|verified bundle/i);
+    assert.match(policy, /verified\s+(?:evidence\s+)?bundle/i);
     assert.match(policy, /(?:title and description|pull-request title and description)/i);
     assert.match(policy, /intent, constraints, verification/i);
     assert.match(policy, /missing or stale description|missing, vague, or stale PR description/i);
