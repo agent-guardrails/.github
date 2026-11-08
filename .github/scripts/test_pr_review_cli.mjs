@@ -69,6 +69,10 @@ test('review policy requires bundle-based review and forbids local reviewed-code
     assert.match(policy, /CI results are\s+(?:remote\s+)?evidence/i);
     assert.match(policy, /immediate explicit approval|explicit approval immediately/i);
   }
+  assert.match(agents, /node \.github\/scripts\/pr-review-sync\.mjs[\s\S]*?--repo[\s\S]*?--pr[\s\S]*?--worktree[\s\S]*?--head/i);
+  assert.match(agents, /node \.github\/scripts\/pr-review-collect\.mjs[\s\S]*--repo[\s\S]*--pr[\s\S]*--worktree[\s\S]*--out/i);
+  assert.match(agents, /from a\s+trusted tooling checkout,?\s+never from the reviewed worktree/i);
+  assert.match(agents, /caller paths (?:are|must be) canonical absolute\s+paths without symbolic-?link components/i);
   assert.match(agents, /fixture tests may run only in this repository's CI/i);
   assert.match(readme, /fixture tests run only in this\s+repository's CI/i);
   assert.match(readme, /Quit and restart\s+OpenCode/i);
