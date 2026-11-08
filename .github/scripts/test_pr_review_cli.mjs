@@ -66,7 +66,7 @@ test('review policy requires bundle-based review and forbids local reviewed-code
     assert.match(policy, /missing or stale description|missing, vague, or stale PR description/i);
     assert.match(policy, /must not\s+invoke generic `review-work`|MUST NOT invoke generic `review-work`/i);
     assert.match(policy, /local tests,?\s+builds,?\s+package scripts/i);
-    assert.match(policy, /CI results are (?:remote )?evidence/i);
+    assert.match(policy, /CI results are\s+(?:remote\s+)?evidence/i);
     assert.match(policy, /immediate explicit approval|explicit approval immediately/i);
   }
   assert.match(agents, /fixture tests may run only in this repository's CI/i);
