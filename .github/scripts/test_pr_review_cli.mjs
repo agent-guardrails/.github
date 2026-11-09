@@ -31,6 +31,7 @@ test('OpenCode V2 permissions allow fixed read-only review commands and override
   assert.deepEqual(shellRules.filter(([, effect]) => effect === 'allow').map(([pattern]) => pattern), [
     'node .github/scripts/pr-review-sync.mjs *',
     'node .github/scripts/pr-review-collect.mjs *',
+    'node .github/scripts/pr-review-inspect.mjs *',
   ]);
   assert.equal(shellRules.some(([pattern, effect]) => effect === 'allow' && ['*', 'git *', 'gh *'].includes(pattern)), false);
   const effectiveEffect = (command) => shellRules.reduce((effect, [pattern, action]) => {
@@ -39,6 +40,21 @@ test('OpenCode V2 permissions allow fixed read-only review commands and override
   }, undefined);
   assert.equal(effectiveEffect('node .github/scripts/pr-review-sync.mjs --repo agent-guardrails/example'), 'allow');
   assert.equal(effectiveEffect('node .github/scripts/pr-review-collect.mjs --repo agent-guardrails/example'), 'allow');
+  assert.equal(effectiveEffect('node .github/scripts/pr-review-inspect.mjs --bundle /tmp/bundle --view pr'), 'allow');
+  for (const suffix of [
+    '; uname -a',
+    ' && uname -a',
+    ' | uname -a',
+    ' > /tmp/output',
+    ' < /tmp/input',
+    ' $(uname -a)',
+    ' `uname -a`',
+    '\nuname -a',
+  ]) assert.equal(effectiveEffect(`node .github/scripts/pr-review-inspect.mjs --bundle /tmp/bundle --view pr${suffix}`), 'ask');
+  assert.equal(effectiveEffect('node -e "console.log(1)"'), 'ask');
+  assert.equal(effectiveEffect('python -c "print(1)"'), 'ask');
+  assert.equal(effectiveEffect('jq . /tmp/bundle/pr.json'), 'ask');
+  assert.equal(effectiveEffect('cat /tmp/bundle/pr.json'), 'ask');
   assert.equal(effectiveEffect('node .github/scripts/pr-review-publish.mjs --bundle /tmp/bundle --findings /tmp/findings.json'), 'ask');
   assert.equal(effectiveEffect('node .github/scripts/pr-review-publish.mjs --bundle /tmp/bundle --findings /tmp/findings.json --confirm'), 'ask');
   assert.equal(effectiveEffect('node .github/scripts/pr-review-publish.mjs --confirm --bundle /tmp/bundle --findings /tmp/findings.json'), 'ask');
@@ -52,7 +68,7 @@ test('OpenCode V2 permissions allow fixed read-only review commands and override
   assert.equal(effectiveEffect('make build'), 'ask');
 });
 
-test('review policy requires bundle-based review and forbids local reviewed-code execution', async () => {
+test('review policy requires fixed inspection views and forbids ad hoc review parsing', async () => {
   const agents = await readFile(new URL('../../AGENTS.md', import.meta.url), 'utf8');
   const readme = await readFile(new URL('../../README.md', import.meta.url), 'utf8');
   const workflow = await readFile(new URL('../workflows/pr-review-tests.yml', import.meta.url), 'utf8');
@@ -60,6 +76,7 @@ test('review policy requires bundle-based review and forbids local reviewed-code
     assert.match(policy, /shortest fixed (?:path|sequence)/i);
     assert.match(policy, /pr-review-sync/i);
     assert.match(policy, /pr-review-collect/i);
+    assert.match(policy, /pr-review-inspect/i);
     assert.match(policy, /verified\s+(?:evidence\s+)?bundle/i);
     assert.match(policy, /(?:title and description|pull-request title and description)/i);
     assert.match(policy, /intent, constraints, verification/i);
@@ -67,10 +84,13 @@ test('review policy requires bundle-based review and forbids local reviewed-code
     assert.match(policy, /must not\s+invoke generic `review-work`|MUST NOT invoke generic `review-work`/i);
     assert.match(policy, /local tests,?\s+builds,?\s+package scripts/i);
     assert.match(policy, /CI results are\s+(?:remote\s+)?evidence/i);
+    assert.match(policy, /inline Node or Python[\s\S]*heredocs[\s\S]*`jq`[\s\S]*`cat`, `grep`, `sed`, or `awk` parsing/i);
+    assert.match(policy, /`pr`[\s\S]*`files`[\s\S]*path-scoped `diff`[\s\S]*`ci`[\s\S]*`discussion`[\s\S]*`manifest` views/i);
     assert.match(policy, /immediate explicit approval|explicit approval immediately/i);
   }
   assert.match(agents, /node \.github\/scripts\/pr-review-sync\.mjs[\s\S]*?--repo[\s\S]*?--pr[\s\S]*?--worktree[\s\S]*?--head/i);
   assert.match(agents, /node \.github\/scripts\/pr-review-collect\.mjs[\s\S]*--repo[\s\S]*--pr[\s\S]*--worktree[\s\S]*--out/i);
+  assert.match(agents, /node \.github\/scripts\/pr-review-inspect\.mjs[\s\S]*--bundle[\s\S]*--view/i);
   assert.match(agents, /from a\s+trusted tooling checkout,?\s+never from the reviewed worktree/i);
   assert.match(agents, /caller paths (?:are|must be) canonical absolute\s+paths without symbolic-?link components/i);
   assert.match(agents, /fixture tests may run only in this repository's CI/i);
@@ -122,8 +142,8 @@ test('caller path canonicalizes case aliases on case-insensitive filesystems', a
   assert.equal(canonicalAlias, await validateCallerPath(actual, { mustExist: true, kind: 'directory' }));
 });
 
-test('all three launchers emit JSON failures and nonzero status without network access', async () => {
-  for (const name of ['pr-review-sync.mjs', 'pr-review-collect.mjs', 'pr-review-publish.mjs']) {
+test('all four launchers emit JSON failures and nonzero status without network access', async () => {
+  for (const name of ['pr-review-sync.mjs', 'pr-review-collect.mjs', 'pr-review-inspect.mjs', 'pr-review-publish.mjs']) {
     const result = await launch(path.join(path.dirname(new URL(import.meta.url).pathname), name));
     assert.equal(result.error.code, 1);
     const record = JSON.parse(result.stdout);

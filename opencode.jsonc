@@ -4,7 +4,16 @@
     "bash": {
       "*": "ask",
       "node .github/scripts/pr-review-sync.mjs *": "allow",
-      "node .github/scripts/pr-review-collect.mjs *": "allow"
+      "node .github/scripts/pr-review-collect.mjs *": "allow",
+      "node .github/scripts/pr-review-inspect.mjs *": "allow",
+      "*;*": "ask",
+      "*&*": "ask",
+      "*|*": "ask",
+      "*>*": "ask",
+      "*<*": "ask",
+      "*$(*": "ask",
+      "*`*": "ask",
+      "*\n*": "ask"
     }
   }
 }
