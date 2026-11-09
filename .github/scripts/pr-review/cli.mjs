@@ -10,7 +10,9 @@ export function parseArgs(argv, definition) {
     if (spec.boolean) result[spec.name] = true;
     else {
       const value = argv[index + 1];
-      if (value === undefined || value.startsWith('--')) throw new ReviewError('invalid-input', `Missing value for ${flag}`);
+      if (value === undefined || (!spec.allowLeadingDashes && value.startsWith('--'))) {
+        throw new ReviewError('invalid-input', `Missing value for ${flag}`);
+      }
       result[spec.name] = value;
       index += 1;
     }
