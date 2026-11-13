@@ -9,6 +9,8 @@ on:
       - .github/scripts/pr-review/**
       - .github/scripts/pr-review-*.mjs
       - .github/scripts/test_pr_review_*.mjs
+      - .github/scripts/shell-warden-v2-source-gates.mjs
+      - .github/scripts/test_shell_warden_v2_source_gates.mjs
       - .github/workflows/pr-review-tests.yml
   workflow_dispatch:
 
@@ -39,3 +41,6 @@ jobs:
           PR_REVIEW_REQUIRE_SCHEMAS: "1"
           PR_REVIEW_SCHEMA_DIR: .review-docs/schemas
         run: node --test .github/scripts/test_pr_review_*.mjs
+
+      - name: Run trusted source-gate tool tests
+        run: node --test .github/scripts/test_shell_warden_v2_source_gates.mjs
