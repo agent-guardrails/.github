@@ -66,6 +66,12 @@ with it.
   one ticket = one dedicated worktree, created before the first edit, removed when
   the ticket closes or is abandoned. The main checkout stays clean for review;
   parallel sessions stay isolated.
+- **Fresh default branch in every worktree** — before creating a `feature/*` or
+  `fix/*` branch, update the HEAD of the default branch in all worktrees of the
+  repository: fetch from the remote and fast-forward each worktree's local
+  default branch, so every new branch starts from the latest remote state.
+  Creating a branch on a stale default branch is a bug — refresh first, then
+  branch.
 
 ## 5. Language policy
 
