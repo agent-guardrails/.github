@@ -21,7 +21,7 @@ test('fixed CLI parser rejects missing, duplicate, and unknown flags', () => {
   assert.throws(() => parseArgs(['--other'], definition), { code: 'invalid-input' });
 });
 
-test('OpenCode V2 permissions allow fixed read-only review commands and override confirmed publication', async () => {
+test('OpenCode V2 permissions allow the fixed trusted-tooling commands and keep composition and confirmed publication guarded', async () => {
   const config = JSON.parse(await readFile(new URL('../../opencode.jsonc', import.meta.url), 'utf8'));
   assert.equal(Object.hasOwn(config, 'permissions'), false);
   assert.equal(typeof config.permission, 'object');
@@ -32,6 +32,7 @@ test('OpenCode V2 permissions allow fixed read-only review commands and override
     'node .github/scripts/pr-review-sync.mjs *',
     'node .github/scripts/pr-review-collect.mjs *',
     'node .github/scripts/pr-review-inspect.mjs *',
+    'node .github/scripts/shell-warden-v2-source-gates.mjs *',
   ]);
   assert.equal(shellRules.some(([pattern, effect]) => effect === 'allow' && ['*', 'git *', 'gh *'].includes(pattern)), false);
   const effectiveEffect = (command) => shellRules.reduce((effect, [pattern, action]) => {
@@ -41,6 +42,16 @@ test('OpenCode V2 permissions allow fixed read-only review commands and override
   assert.equal(effectiveEffect('node .github/scripts/pr-review-sync.mjs --repo agent-guardrails/example'), 'allow');
   assert.equal(effectiveEffect('node .github/scripts/pr-review-collect.mjs --repo agent-guardrails/example'), 'allow');
   assert.equal(effectiveEffect('node .github/scripts/pr-review-inspect.mjs --bundle /tmp/bundle --view pr'), 'allow');
+  assert.equal(
+    effectiveEffect(
+      'node .github/scripts/shell-warden-v2-source-gates.mjs ' +
+        '--docs /canonical/docs --docs-head 0123456789abcdef0123456789abcdef01234567 ' +
+        '--checker /canonical/shell-warden --checker-head 0123456789abcdef0123456789abcdef01234567 ' +
+        '--hook /canonical/opencode-shell-warden-hook --hook-head 0123456789abcdef0123456789abcdef01234567 ' +
+        '--out /canonical/evidence',
+    ),
+    'allow',
+  );
   for (const suffix of [
     '; uname -a',
     ' && uname -a',

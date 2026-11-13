@@ -85,6 +85,18 @@ async function makeRepositories(root, overrides = {}) {
   };
 }
 
+function gateOptions(repos, overrides = {}) {
+  return {
+    docs: repos.docs,
+    checker: repos.checker,
+    hook: repos.hook,
+    docsHead: HEAD_SHA,
+    checkerHead: HEAD_SHA,
+    hookHead: HEAD_SHA,
+    ...overrides,
+  };
+}
+
 function fakeRunner(overrides = {}) {
   const calls = [];
   const remotes = {
@@ -94,6 +106,8 @@ function fakeRunner(overrides = {}) {
     ...overrides.remotes,
   };
   const statusOutput = overrides.statusOutput ?? '';
+  const headSha = overrides.headSha ?? HEAD_SHA;
+  const originMainSha = overrides.originMainSha ?? headSha;
   const failures = overrides.failures ?? [];
   const run = (request) => {
     calls.push(request);
@@ -108,7 +122,10 @@ function fakeRunner(overrides = {}) {
     }
     if (command === 'git') {
       if (args[0] === 'remote') return out(`${remotes[path.basename(cwd)] ?? ''}\n`);
-      if (args[0] === 'rev-parse' && args[1] === 'HEAD') return out(`${HEAD_SHA}\n`);
+      if (args[0] === 'rev-parse' && args.includes('refs/remotes/origin/main')) {
+        return out(`${originMainSha}\n`);
+      }
+      if (args[0] === 'rev-parse' && args[1] === 'HEAD') return out(`${headSha}\n`);
       if (args[0] === 'rev-parse') return out('main\n');
       if (args[0] === 'status') return out(statusOutput);
       if (args[0] === '--version') return out('git version 2.39.0\n');
@@ -135,35 +152,38 @@ function readEvidence(evidence, relative) {
 // Path validation
 // ---------------------------------------------------------------------------
 
-test('rejects relative, non-canonical, and missing repository paths', async () => {
+test('rejects relative, non-canonical, and missing repository paths and malformed SHAs', async () => {
   const root = await temporary();
   const repos = await makeRepositories(root);
   const deps = { run: fakeRunner().run, now: NOW };
   const output = path.join(root, 'evidence');
 
   await assert.rejects(
-    runSourceGates({ docs: 'relative/docs', checker: repos.checker, hook: repos.hook, out: output }, deps),
+    runSourceGates(gateOptions(repos, { docs: 'relative/docs', out: output }), deps),
     (error) => error instanceof SourceGateError && error.code === 'invalid-input',
   );
   await assert.rejects(
-    runSourceGates(
-      { docs: `${root}/docs/../docs`, checker: repos.checker, hook: repos.hook, out: output },
-      deps,
-    ),
+    runSourceGates(gateOptions(repos, { docs: `${root}/docs/../docs`, out: output }), deps),
     (error) => error.code === 'invalid-input',
   );
   await assert.rejects(
-    runSourceGates({ docs: `${repos.docs}/`, checker: repos.checker, hook: repos.hook, out: output }, deps),
+    runSourceGates(gateOptions(repos, { docs: `${repos.docs}/`, out: output }), deps),
     (error) => error.code === 'invalid-input',
   );
   await assert.rejects(
-    runSourceGates({ docs: path.join(root, 'missing-repo'), checker: repos.checker, hook: repos.hook, out: output }, deps),
+    runSourceGates(gateOptions(repos, { docs: path.join(root, 'missing-repo'), out: output }), deps),
     (error) => error.code === 'invalid-input' && /does not exist/.test(error.message),
   );
   await assert.rejects(
-    runSourceGates({ docs: repos.docs, checker: repos.checker, hook: repos.hook, out: 'relative/evidence' }, deps),
+    runSourceGates(gateOptions(repos, { out: 'relative/evidence' }), deps),
     (error) => error.code === 'invalid-input' && /--out/.test(error.message),
   );
+  for (const bad of ['shortsha', `${'a'.repeat(39)}`, `${'z'.repeat(40)}`, '', undefined]) {
+    await assert.rejects(
+      runSourceGates(gateOptions(repos, { checkerHead: bad, out: output }), deps),
+      (error) => error.code === 'invalid-input' && /--checker-head/.test(error.message),
+    );
+  }
 });
 
 test('rejects symlinked path components for inputs and output parents', async () => {
@@ -176,7 +196,7 @@ test('rejects symlinked path components for inputs and output parents', async ()
   const deps = { run: fakeRunner().run, now: NOW };
 
   await assert.rejects(
-    runSourceGates({ docs: link, checker: repos.checker, hook: repos.hook, out: path.join(root, 'evidence') }, deps),
+    runSourceGates(gateOptions(repos, { docs: link, out: path.join(root, 'evidence') }), deps),
     (error) => error.code === 'symlink-component' && /--docs/.test(error.message),
   );
   assert.throws(
@@ -198,7 +218,7 @@ test('refuses to overwrite an existing evidence directory', async () => {
 
   await assert.rejects(
     runSourceGates(
-      { docs: repos.docs, checker: repos.checker, hook: repos.hook, out: output },
+      gateOptions(repos, { out: output }),
       { run: fakeRunner().run, now: NOW },
     ),
     (error) => error.code === 'output-exists',
@@ -207,12 +227,18 @@ test('refuses to overwrite an existing evidence directory', async () => {
   assert.deepEqual(fs.readdirSync(output).sort(), ['keep.txt']);
 });
 
-test('parseArguments requires exactly the four fixed flags', () => {
+test('parseArguments requires exactly the seven fixed flags', () => {
+  const sha = HEAD_SHA;
   assert.deepEqual(
-    parseArguments(['--docs', 'd', '--checker', 'c', '--hook', 'h', '--out', 'o']),
-    { docs: 'd', checker: 'c', hook: 'h', out: 'o' },
+    parseArguments([
+      '--docs', 'd', '--docs-head', sha,
+      '--checker', 'c', '--checker-head', sha,
+      '--hook', 'h', '--hook-head', sha,
+      '--out', 'o',
+    ]),
+    { docs: 'd', docsHead: sha, checker: 'c', checkerHead: sha, hook: 'h', hookHead: sha, out: 'o' },
   );
-  assert.throws(() => parseArguments(['--docs', 'd']), /missing required argument --checker/);
+  assert.throws(() => parseArguments(['--docs', 'd']), /missing required argument --docs-head/);
   assert.throws(() => parseArguments(['--docs', 'd', '--docs', 'd2']), /duplicate argument/);
   assert.throws(() => parseArguments(['--docs', 'd', '--extra']), /unexpected argument/);
   assert.throws(() => parseArguments(['--docs']), /missing value/);
@@ -250,7 +276,7 @@ test('rejects unexpected repository identity and skips later gates', async () =>
   });
 
   const outcome = await runSourceGates(
-    { docs: repos.docs, checker: repos.checker, hook: repos.hook, out: path.join(root, 'evidence') },
+    gateOptions(repos, { out: path.join(root, 'evidence') }),
     { run: gate.run, now: NOW },
   );
 
@@ -270,7 +296,7 @@ test('rejects dirty worktrees and records head state', async () => {
   const gate = fakeRunner({ statusOutput: '?? untracked.txt\n' });
 
   const outcome = await runSourceGates(
-    { docs: repos.docs, checker: repos.checker, hook: repos.hook, out: path.join(root, 'evidence') },
+    gateOptions(repos, { out: path.join(root, 'evidence') }),
     { run: gate.run, now: NOW },
   );
 
@@ -288,23 +314,63 @@ test('rejects dirty worktrees and records head state', async () => {
 // Manifest counts and fixture identity
 // ---------------------------------------------------------------------------
 
+test('fails when the checked-out HEAD is not the caller-pinned SHA', async () => {
+  const root = await temporary();
+  const repos = await makeRepositories(root);
+  const pinned = 'b'.repeat(40);
+  const gate = fakeRunner();
+
+  const outcome = await runSourceGates(
+    gateOptions(repos, { docsHead: pinned, checkerHead: pinned, hookHead: pinned, out: path.join(root, 'evidence') }),
+    { run: gate.run, now: NOW },
+  );
+
+  assert.equal(outcome.status, 'FAIL');
+  assert.equal(outcome.summary.gates[2].name, 'repo-head-pin');
+  assert.equal(outcome.summary.gates[2].status, 'fail');
+  assert.ok(outcome.summary.gates.slice(3).every((entry) => entry.status === 'skipped'));
+  assert.equal(outcome.summary.repositories.docs.headSha, HEAD_SHA);
+  assert.equal(outcome.summary.repositories.docs.expectedHead, pinned);
+  assert.equal(outcome.summary.repositories.docs.headMatchesExpected, false);
+  assert.match(await readEvidence(outcome.evidence, 'logs/02-repo-head-pin.log'), /HEAD MISMATCH/);
+});
+
+test('records the origin/main comparison as advisory evidence', async () => {
+  const root = await temporary();
+  const repos = await makeRepositories(root);
+  const gate = fakeRunner({ originMainSha: 'c'.repeat(40) });
+
+  const outcome = await runSourceGates(
+    gateOptions(repos, { out: path.join(root, 'evidence') }),
+    { run: gate.run, now: NOW },
+  );
+
+  assert.equal(outcome.status, 'PASS');
+  assert.equal(outcome.summary.gates[2].name, 'repo-head-pin');
+  assert.equal(outcome.summary.gates[2].status, 'pass');
+  assert.equal(outcome.summary.repositories.docs.headMatchesExpected, true);
+  assert.equal(outcome.summary.repositories.docs.originMainSha, 'c'.repeat(40));
+  assert.equal(outcome.summary.repositories.docs.matchesOriginMain, false);
+  assert.match(await readEvidence(outcome.evidence, 'logs/02-repo-head-pin.log'), /ADVISORY: pinned SHA is not the local origin\/main ref/);
+});
+
 test('fails on manifest count mismatch and records observed counts', async () => {
   const root = await temporary();
   const repos = await makeRepositories(root, { manifest: manifestDocument({ total: 41 }) });
   const gate = fakeRunner();
 
   const outcome = await runSourceGates(
-    { docs: repos.docs, checker: repos.checker, hook: repos.hook, out: path.join(root, 'evidence') },
+    gateOptions(repos, { out: path.join(root, 'evidence') }),
     { run: gate.run, now: NOW },
   );
 
   assert.equal(outcome.status, 'FAIL');
-  assert.equal(outcome.summary.gates[2].name, 'manifest-counts');
-  assert.equal(outcome.summary.gates[2].status, 'fail');
-  assert.ok(outcome.summary.gates.slice(3).every((entry) => entry.status === 'skipped'));
+  assert.equal(outcome.summary.gates[3].name, 'manifest-counts');
+  assert.equal(outcome.summary.gates[3].status, 'fail');
+  assert.ok(outcome.summary.gates.slice(4).every((entry) => entry.status === 'skipped'));
   assert.equal(outcome.summary.manifestCounts.observed.total, 41);
   assert.deepEqual(outcome.summary.manifestCounts.expected, EXPECTED_COUNTS);
-  assert.match(await readEvidence(outcome.evidence, 'logs/02-manifest-counts.log'), /COUNT MISMATCH/);
+  assert.match(await readEvidence(outcome.evidence, 'logs/03-manifest-counts.log'), /COUNT MISMATCH/);
 });
 
 test('fails when fixture copies are not byte-identical', async () => {
@@ -315,16 +381,16 @@ test('fails when fixture copies are not byte-identical', async () => {
   const gate = fakeRunner();
 
   const outcome = await runSourceGates(
-    { docs: repos.docs, checker: repos.checker, hook: repos.hook, out: path.join(root, 'evidence') },
+    gateOptions(repos, { out: path.join(root, 'evidence') }),
     { run: gate.run, now: NOW },
   );
 
   assert.equal(outcome.status, 'FAIL');
-  assert.equal(outcome.summary.gates[3].name, 'fixture-identity');
-  assert.equal(outcome.summary.gates[3].status, 'fail');
+  assert.equal(outcome.summary.gates[4].name, 'fixture-identity');
+  assert.equal(outcome.summary.gates[4].status, 'fail');
   assert.equal(outcome.summary.fixtureIdentity.byteIdentical, false);
-  assert.ok(outcome.summary.gates.slice(4).every((entry) => entry.status === 'skipped'));
-  const log = await readEvidence(outcome.evidence, 'logs/03-fixture-identity.log');
+  assert.ok(outcome.summary.gates.slice(5).every((entry) => entry.status === 'skipped'));
+  const log = await readEvidence(outcome.evidence, 'logs/04-fixture-identity.log');
   assert.match(log, /semantic\/fixture-41\.json: docs=[0-9a-f]{64} hook=[0-9a-f]{64}/);
 });
 
@@ -338,7 +404,7 @@ test('propagates child-command failure, skips later gates, preserves evidence', 
   const gate = fakeRunner({ failures: [{ command: 'cargo', args: ['test'] }] });
 
   const outcome = await runSourceGates(
-    { docs: repos.docs, checker: repos.checker, hook: repos.hook, out: path.join(root, 'evidence') },
+    gateOptions(repos, { out: path.join(root, 'evidence') }),
     { run: gate.run, now: NOW },
   );
 
@@ -374,16 +440,18 @@ test('passes all gates and produces a deterministic summary and logs', async () 
   const deps = { run: gate.run, now: NOW };
 
   const firstOutcome = await runSourceGates(
-    { docs: repos.docs, checker: repos.checker, hook: repos.hook, out: first }, deps,
+    gateOptions(repos, { out: first }), deps,
   );
   const secondOutcome = await runSourceGates(
-    { docs: repos.docs, checker: repos.checker, hook: repos.hook, out: second }, deps,
+    gateOptions(repos, { out: second }), deps,
   );
 
   assert.equal(firstOutcome.status, 'PASS');
   assert.equal(secondOutcome.status, 'PASS');
   assert.ok(firstOutcome.summary.gates.every((entry) => entry.status === 'pass'));
   assert.equal(firstOutcome.summary.gates.length, GATES.length);
+  assert.equal(firstOutcome.summary.repositories.docs.headMatchesExpected, true);
+  assert.equal(firstOutcome.summary.repositories.docs.matchesOriginMain, true);
   assert.equal(firstOutcome.summary.manifestCounts.observed.total, 42);
   assert.deepEqual(firstOutcome.summary.manifestCounts.observed.roles, {
     'checker-producer': 26,
@@ -419,7 +487,12 @@ test('main exits 2 on validation errors and 1 on gate failure through the CLI', 
   const root = await temporary();
   const repos = await makeRepositories(root, { manifest: manifestDocument({ total: 41 }) });
   const code = await main(
-    ['--docs', repos.docs, '--checker', repos.checker, '--hook', repos.hook, '--out', path.join(root, 'evidence')],
+    [
+      '--docs', repos.docs, '--docs-head', HEAD_SHA,
+      '--checker', repos.checker, '--checker-head', HEAD_SHA,
+      '--hook', repos.hook, '--hook-head', HEAD_SHA,
+      '--out', path.join(root, 'evidence'),
+    ],
     { run: fakeRunner().run, now: NOW },
   );
   assert.equal(code, 1);

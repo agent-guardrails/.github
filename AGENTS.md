@@ -130,7 +130,40 @@ with it.
   review findings in chat requires only sync, collect, and inspect and remains
   unattended.
 
-## 8. Accountability
+## 8. Source gates (Shell Warden v2)
+
+- After an implementation pull request is merged and before integration or
+  release work consumes the merged state, the three product checkouts (docs,
+  checker, hook) MUST pass the Shell Warden v2 source gate from a trusted
+  tooling checkout. The fixed command, run from the trusted tooling repository
+  itself as the workspace root:
+
+  ```sh
+  node .github/scripts/shell-warden-v2-source-gates.mjs \
+    --docs /canonical/docs --docs-head FULL_DOCS_SHA \
+    --checker /canonical/shell-warden --checker-head FULL_CHECKER_SHA \
+    --hook /canonical/opencode-shell-warden-hook --hook-head FULL_HOOK_SHA \
+    --out /canonical/evidence-directory
+  ```
+
+  From a parent workspace containing the trusted tooling checkout at
+  `.github/`, the prefix is `node .github/.github/scripts/shell-warden-v2-source-gates.mjs`;
+  the chosen prefix MUST match the active workspace permission allowlist exactly.
+- Every path argument and every pinned HEAD SHA MUST come from the operator.
+  The tool verifies canonical paths, the expected `agent-guardrails` origin,
+  a clean worktree, and that each checkout's HEAD exactly equals the pinned
+  full SHA before running any gate; whether each pinned SHA is the locally
+  known `origin/main` is recorded as advisory evidence in the output.
+- The source gate is a **source/release preflight**, not a PR-review tool. It
+  MUST NOT be run on untrusted or reviewed worktrees and MUST NOT be
+  integrated into the pr-review pipeline. It executes code from the supplied
+  checkouts (validators, cargo, npm), which is why the checkout identity,
+  cleanliness, and pinned-HEAD requirements are enforced, not optional.
+- The source gate never replaces code or security review. Review happens on
+  the pull request; the gate verifies the merged source state before it is
+  integrated or released.
+
+## 9. Accountability
 
 - A requirement above left unmet means the work is unfinished (open).
 - Unclear text, off-board work, or bypassing PRs send the change back for rework.

@@ -7,8 +7,11 @@
 //
 //   node .github/scripts/shell-warden-v2-source-gates.mjs \
 //     --docs /absolute/path/to/docs \
+//     --docs-head 40hexsha \
 //     --checker /absolute/path/to/shell-warden \
+//     --checker-head 40hexsha \
 //     --hook /absolute/path/to/opencode-shell-warden-hook \
+//     --hook-head 40hexsha \
 //     --out /absolute/path/to/evidence-directory
 //
 // SECURITY BOUNDARY: this tool executes code from the supplied repositories
@@ -24,7 +27,10 @@
 // recorded as "skipped"); every gate runs to completion and all evidence
 // produced before the failure is preserved. The evidence directory is built
 // in a temporary sibling and moved into place atomically; an existing --out
-// is refused, never overwritten.
+// is refused, never overwritten. Each checkout's HEAD must exactly equal the
+// caller-pinned full SHA (--docs-head/--checker-head/--hook-head); whether
+// that SHA is the locally known origin/main ref is recorded as advisory
+// evidence and does not fail the gate.
 //
 // Exit codes: 0 all gates passed; 1 gate failure; 2 usage/validation error;
 // 3 internal error.
@@ -65,7 +71,8 @@ export const REPOSITORIES = Object.freeze({
 
 export const USAGE =
   'usage: node .github/scripts/shell-warden-v2-source-gates.mjs ' +
-  '--docs <dir> --checker <dir> --hook <dir> --out <dir>';
+  '--docs <dir> --docs-head <full-sha> --checker <dir> --checker-head <full-sha> ' +
+  '--hook <dir> --hook-head <full-sha> --out <dir>';
 
 const GATE_TIMEOUT_MS = 15 * 60 * 1000;
 const MAX_OUTPUT_BYTES = 64 * 1024 * 1024;
@@ -91,6 +98,7 @@ export class SourceGateError extends Error {
 export const GATES = Object.freeze([
   { name: 'repo-identity', kind: 'identity' },
   { name: 'repo-clean', kind: 'clean' },
+  { name: 'repo-head-pin', kind: 'head-pin' },
   { name: 'manifest-counts', kind: 'manifest' },
   { name: 'fixture-identity', kind: 'fixtures' },
   {
@@ -176,8 +184,7 @@ export function canonicalDirectory(value, label) {
   return resolved;
 }
 
-export function canonicalOutputPath(value, label) {
-  assertAbsolutePath(value, label);
+export function canonicalOutputPath(value, label) {  assertAbsolutePath(value, label);
   const resolved = assertCanonical(value, label);
   const parent = path.dirname(resolved);
   // Every existing component must be a real directory; the first missing
@@ -208,14 +215,26 @@ export function canonicalOutputPath(value, label) {
   return resolved;
 }
 
+const FULL_SHA_PATTERN = /^[0-9a-f]{40}$/;
+
+export function canonicalHeadSha(value, label) {
+  if (typeof value !== 'string' || !FULL_SHA_PATTERN.test(value.toLowerCase())) {
+    throw new SourceGateError('invalid-input', `${label} must be a full 40-character hexadecimal git SHA: ${value}`);
+  }
+  return value.toLowerCase();
+}
+
 // ---------------------------------------------------------------------------
 // Arguments
 // ---------------------------------------------------------------------------
 
 const FLAGS = Object.freeze({
   '--docs': 'docs',
+  '--docs-head': 'docsHead',
   '--checker': 'checker',
+  '--checker-head': 'checkerHead',
   '--hook': 'hook',
+  '--hook-head': 'hookHead',
   '--out': 'out',
 });
 
@@ -522,6 +541,40 @@ function checkClean(context, run, metadata) {
   return { ok: !failed, lines };
 }
 
+function checkHeadPin(context, metadata) {
+  const lines = [];
+  let failed = false;
+  for (const key of Object.keys(REPOSITORIES)) {
+    const actual = metadata[key].headSha;
+    const expected = context.expectedHeads[key];
+    const matches = actual !== null && actual === expected;
+    metadata[key].expectedHead = expected;
+    metadata[key].headMatchesExpected = matches;
+    lines.push(`${key}: HEAD ${actual ?? '<unavailable>'} expected ${expected} => ${matches ? 'MATCH' : 'HEAD MISMATCH'}`);
+    if (!matches) failed = true;
+  }
+  return { ok: !failed, lines };
+}
+
+function checkOriginMain(context, run, metadata) {
+  // Advisory, non-failing: records whether each pinned HEAD is the checkout's
+  // locally known origin/main ref so the evidence shows it explicitly.
+  const lines = [];
+  for (const key of Object.keys(REPOSITORIES)) {
+    const cwd = context.repositories[key];
+    const result = run({ command: 'git', args: ['rev-parse', '--verify', 'refs/remotes/origin/main'], cwd });
+    const originMainSha = result.status === 0 ? result.stdout.trim().toLowerCase() || null : null;
+    const matches = originMainSha !== null && originMainSha === metadata[key].headSha;
+    metadata[key].originMainSha = originMainSha;
+    metadata[key].matchesOriginMain = matches;
+    lines.push(
+      `${key}: origin/main ${originMainSha ?? '<ref unavailable>'} ` +
+        `=> ${matches ? 'pinned SHA is the local origin/main ref' : 'ADVISORY: pinned SHA is not the local origin/main ref (recorded, not failed)'}`,
+    );
+  }
+  return { ok: true, lines: [...lines, 'origin/main comparison recorded as advisory evidence'] };
+}
+
 function checkManifest(context) {
   const manifestPath = path.join(context.repositories.docs, REPOSITORIES.docs.manifest);
   let observed;
@@ -627,6 +680,10 @@ function executeGate(gate, index, context, deps, staging, metadata) {
     outcome = checkIdentity(context, deps.run, metadata);
   } else if (gate.kind === 'clean') {
     outcome = checkClean(context, deps.run, metadata);
+  } else if (gate.kind === 'head-pin') {
+    const pin = checkHeadPin(context, metadata);
+    const advisory = checkOriginMain(context, deps.run, metadata);
+    outcome = { ok: pin.ok, lines: [...pin.lines, ...advisory.lines] };
   } else if (gate.kind === 'manifest') {
     outcome = checkManifest(context);
   } else if (gate.kind === 'fixtures') {
@@ -675,11 +732,16 @@ export async function runSourceGates(options, deps = {}) {
     checker: canonicalDirectory(options.checker, '--checker'),
     hook: canonicalDirectory(options.hook, '--hook'),
   };
+  const expectedHeads = {
+    docs: canonicalHeadSha(options.docsHead, '--docs-head'),
+    checker: canonicalHeadSha(options.checkerHead, '--checker-head'),
+    hook: canonicalHeadSha(options.hookHead, '--hook-head'),
+  };
   const out = canonicalOutputPath(options.out, '--out');
 
   const staging = createStagingDirectory(out);
   try {
-    const context = { repositories };
+    const context = { repositories, expectedHeads };
     const startedAt = now();
     const toolVersions = collectToolVersions(run);
 

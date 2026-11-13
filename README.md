@@ -190,31 +190,38 @@ immutable evidence directory:
 ```sh
 node .github/scripts/shell-warden-v2-source-gates.mjs \
   --docs /absolute/path/to/docs \
+  --docs-head 40hexsha \
   --checker /absolute/path/to/shell-warden \
+  --checker-head 40hexsha \
   --hook /absolute/path/to/opencode-shell-warden-hook \
+  --hook-head 40hexsha \
   --out /absolute/path/to/evidence-directory
 ```
 
 All four paths must be canonical absolute paths (no `.`, `..`, trailing
-separator, or symlinked component; the parent of `--out` must exist). Gates
-run in a fixed order and the first failure stops the run; later gates are
-recorded as `skipped` and all evidence produced before the failure is
-preserved:
+separator, or symlinked component; the parent of `--out` must exist) and all
+three head arguments must be full 40-character git SHAs whose checkouts they
+pin. Gates run in a fixed order and the first failure stops the run; later
+gates are recorded as `skipped` and all evidence produced before the failure
+is preserved:
 
 1. `repo-identity` — each checkout's `origin` remote must be
    `agent-guardrails/docs`, `agent-guardrails/shell-warden`, or
    `agent-guardrails/opencode-shell-warden-hook`.
 2. `repo-clean` — `git status --porcelain` must be empty; the exact SHA,
    branch, and detached state of each checkout are recorded.
-3. `manifest-counts` — the canonical docs verdict-v2 manifest must contain
+3. `repo-head-pin` — each checkout's HEAD must exactly equal the caller-pinned
+   full SHA; whether the pinned SHA is the locally known `origin/main` ref is
+   recorded as advisory evidence and does not fail the gate.
+4. `manifest-counts` — the canonical docs verdict-v2 manifest must contain
    exactly total 42, `checker-producer` 26, `checker-serialization` 28, and
    `hook-consumer` 42.
-4. `fixture-identity` — the docs, checker, and hook fixture copies must be
+5. `fixture-identity` — the docs, checker, and hook fixture copies must be
    byte-identical (SHA-256 map over every file).
-5. `docs-verdict-v2-fixture-validator` — the docs repository validator.
-6. Checker gates: `cargo test --test verdict_v2_conformance`, `cargo test`,
+6. `docs-verdict-v2-fixture-validator` — the docs repository validator.
+7. Checker gates: `cargo test --test verdict_v2_conformance`, `cargo test`,
    `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`.
-7. Hook gates: `npm test`, `npm run typecheck`.
+8. Hook gates: `npm test`, `npm run typecheck`.
 
 The evidence directory is created atomically (temporary sibling directory +
 rename) and an existing `--out` is refused, never overwritten. Exit codes:
@@ -225,7 +232,7 @@ The evidence directory contains:
 
 | File | Contents |
 |---|---|
-| `summary.json` | machine-readable summary: status, timestamps, node/npm/cargo/git versions, repository paths with SHAs and branch/detached states, verified manifest counts, fixture identity, and one entry per gate with command, exit code, duration, and log file |
+| `summary.json` | machine-readable summary: status, timestamps, node/npm/cargo/git versions, repository paths with pinned and actual HEAD SHAs, branch/detached states, origin/main advisory comparison, verified manifest counts, fixture identity, and one entry per gate with command, exit code, duration, and log file |
 | `file-hashes.json` | SHA-256 digest of every evidence artifact (the hash file itself is excluded) |
 | `logs/NN-<gate>.log` | complete stdout, stderr, command, working directory, and timing for each gate |
 
@@ -236,10 +243,13 @@ of the three product repositories and never against untrusted or reviewed
 worktrees. It is not integrated into `pr-review-sync`, `pr-review-collect`,
 `pr-review-inspect`, or `pr-review-publish`, holds no GitHub capabilities (no
 write, merge, release, package publication, or issue mutation), and does not
-replace code or security review. The repository permission map ships without
-an allow rule for it (the only allowlisted shapes remain the read-only
-pr-review commands); operators who adopt the tool may add the fixed command
-shape above to their own permission configuration.
+replace code or security review. Because a clean malicious branch would also
+pass identity and cleanliness checks, every run must pin the exact HEAD SHA
+of each checkout (`--docs-head`, `--checker-head`, `--hook-head`), and the
+tool refuses to run anything when a checkout's HEAD differs from its pin.
+The repository permission map allowlists exactly this fixed command shape
+alongside the read-only pr-review shapes; all shell-composition guards and
+the `pr-review-publish` rules stay guarded after it.
 
 ## Repo layout
 

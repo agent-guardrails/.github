@@ -6,6 +6,7 @@
       "node .github/scripts/pr-review-sync.mjs *": "allow",
       "node .github/scripts/pr-review-collect.mjs *": "allow",
       "node .github/scripts/pr-review-inspect.mjs *": "allow",
+      "node .github/scripts/shell-warden-v2-source-gates.mjs *": "allow",
       "*;*": "ask",
       "*&*": "ask",
       "*|*": "ask",
