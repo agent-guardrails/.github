@@ -33,6 +33,25 @@ Board: https://github.com/orgs/agent-guardrails/projects/1
   "Done"); a card returning to "In Progress" means the ticket was split badly.
 - When work is finished, the card is moved or closed.
 
+### Roadmap maintenance
+
+- The existing **Roadmap** view on the project board is the canonical plan for
+  task sequencing and dependencies; do not maintain a separate roadmap document.
+- Maintain it proactively as part of normal task work, without user reminders.
+  Before selecting or starting work, read the roadmap and respect the agreed
+  sequence and blocking dependencies.
+- When tasks are created, split, started, blocked, completed, or rescheduled,
+  update the affected project items and issue dependencies so the roadmap shows
+  the current order and blockers. Reconcile affected downstream tasks as well.
+- Keep planning dates in the project's roadmap fields when supported by an
+  agreed plan or a grounded estimate; distinguish estimates from commitments.
+  Do not invent deadlines merely to populate the timeline.
+- Routine updates that reflect agreed work need no separate request. Obtain user
+  agreement before changing priorities or materially shifting the agreed plan.
+- If required fields, tooling, or permissions are unavailable, report the blocker
+  and the setup needed; do not claim the roadmap was updated or silently
+  substitute a document.
+
 ## 3. Design before implementation
 
 Any major task starts from written design, not from code. A task is **major** when
