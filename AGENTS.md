@@ -35,19 +35,31 @@ Board: https://github.com/orgs/agent-guardrails/projects/1
 
 ### Roadmap maintenance
 
-- The existing **Roadmap** view on the project board is the canonical plan for
-  task sequencing and dependencies; do not maintain a separate roadmap document.
+- The existing [**Roadmap timeline**](https://github.com/orgs/agent-guardrails/projects/1/views/4)
+  is the canonical visual sequence of initiatives, not necessarily a delivery
+  schedule. Do not maintain a separate roadmap document.
 - Maintain it proactively as part of normal task work, without user reminders.
   Before selecting or starting work, read the roadmap and respect the agreed
   sequence and blocking dependencies.
 - When tasks are created, split, started, blocked, completed, or rescheduled,
-  update the affected project items and issue dependencies so the roadmap shows
-  the current order and blockers. Reconcile affected downstream tasks as well.
-- Keep planning dates in the project's roadmap fields when supported by an
-  agreed plan or a grounded estimate; distinguish estimates from commitments.
-  Do not invent deadlines merely to populate the timeline.
+  update affected items, native issue dependencies, and downstream items.
+  Before closing a design/planning issue, transfer successor blockers to its
+  unfinished implementation and verification follow-ups.
+- Populate the start/end date fields selected by the timeline for every affected
+  planned initiative; ordering fields and dependencies alone are not placement.
+  Reconcile downstream windows when a predecessor moves.
+- Preserve owner-agreed targets. When only visual ordering is wanted, use the
+  agreed default of sequential schematic windows with 1–2-week steps. Explicitly
+  label these bounds as visualization only, not effort estimates or delivery
+  commitments. Use agreed plans or grounded estimates for actual schedule dates;
+  do not invent deadlines.
+- The end-date field (currently `Target date`) can remain hidden as a column.
+  Using it to draw a block does not by itself make its value a deadline.
 - Routine updates that reflect agreed work need no separate request. Obtain user
   agreement before changing priorities or materially shifting the agreed plan.
+- Verify saved date bounds and dependencies; inspect the rendered timeline when
+  accessible. If visual verification is unavailable, state that limitation:
+  successful API writes alone do not prove that the user sees the intended view.
 - If required fields, tooling, or permissions are unavailable, report the blocker
   and the setup needed; do not claim the roadmap was updated or silently
   substitute a document.
